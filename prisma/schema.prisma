@@ -23,3 +23,39 @@ model PortfolioRecord {
 
   @@map("portfolio_records")
 }
+
+model AssetItem {
+  id      Int           @id @default(autoincrement())
+  name    String        @unique
+  order   Int           @default(0)
+  records AssetRecord[]
+
+  @@map("asset_items")
+}
+
+model AssetRecord {
+  id        Int       @id @default(autoincrement())
+  year      Int
+  month     Int
+  itemId    Int
+  amount    BigInt    @default(0)
+  item      AssetItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([year, month, itemId])
+  @@map("asset_records")
+}
+
+model Expense {
+  id        Int      @id @default(autoincrement())
+  year      Int
+  month     Int
+  category  String
+  amount    BigInt   @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([year, month, category])
+  @@map("expenses")
+}
