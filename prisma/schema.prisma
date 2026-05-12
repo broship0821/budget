@@ -1,0 +1,25 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Memo {
+  key       String   @id
+  content   String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@map("memos")
+}
+
+model PortfolioRecord {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @unique @db.Date
+  amount    BigInt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("portfolio_records")
+}
