@@ -1,22 +1,23 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
-const CATEGORIES = ["고정비", "변동비", "생활비", "경조사비", "여가비", "용돈", "헌금", "교통비", "의료비"] as const;
-type Category = (typeof CATEGORIES)[number];
+const PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#f97316", "#14b8a6", "#6366f1", "#ef4444", "#84cc16"];
 
-const COLORS: Record<Category, string> = {
-  고정비: "#3b82f6",
-  변동비: "#10b981",
-  생활비: "#f59e0b",
-  경조사비: "#ec4899",
-  여가비: "#8b5cf6",
-  용돈: "#f97316",
-  헌금: "#14b8a6",
-  교통비: "#6366f1",
-  의료비: "#ef4444",
-};
+interface BudgetCategory {
+  id: number;
+  name: string;
+  order: number;
+}
+
+interface ExpenseHistory {
+  year: number;
+  month: number;
+  total: number;
+  label: string;
+  change: number | null;
+}
 
 function formatAmount(n: number) {
   return n.toLocaleString("ko-KR") + "원";
@@ -26,122 +27,223 @@ export default function BudgetClient() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [expenses, setExpenses] = useState<Record<Category, number>>(
-    Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<Category, number>
-  );
-  const [editing, setEditing] = useState<Category | null>(null);
+  const [categories, setCategories] = useState<BudgetCategory[]>([]);
+  const [expenses, setExpenses] = useState<Record<string, number>>({});
+  const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [saving, setSaving] = useState<Category | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<BudgetCategory | null>(null);
+  const [undoStack, setUndoStack] = useState<{ category: string; amount: number }[]>([]);
+  const [expenseHistory, setExpenseHistory] = useState<ExpenseHistory[]>([]);
+  const [historyPeriod, setHistoryPeriod] = useState(12);
   const inputRef = useRef<HTMLInputElement>(null);
+  const addInputRef = useRef<HTMLInputElement>(null);
+
+  const loadCategories = () =>
+    fetch("/api/budget/categories")
+      .then((r) => r.json())
+      .then(setCategories);
+
+  useEffect(() => { loadCategories(); }, []);
 
   useEffect(() => {
+    setUndoStack([]);
     fetch(`/api/expenses?year=${year}&month=${month}`)
       .then((r) => r.json())
       .then((data: { category: string; amount: number }[]) => {
-        const next = Object.fromEntries(CATEGORIES.map((c) => [c, 0])) as Record<Category, number>;
-        for (const e of data) {
-          if (e.category in next) next[e.category as Category] = e.amount;
-        }
+        const next: Record<string, number> = {};
+        for (const e of data) next[e.category] = e.amount;
         setExpenses(next);
       });
   }, [year, month]);
 
   useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
+    fetch("/api/expenses/history").then((r) => r.json()).then(setExpenseHistory);
+  }, [expenses]);
+
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  useEffect(() => { if (adding) addInputRef.current?.focus(); }, [adding]);
 
   const prevMonth = () => {
     if (month === 1) { setYear((y) => y - 1); setMonth(12); }
     else setMonth((m) => m - 1);
   };
-
   const nextMonth = () => {
     if (month === 12) { setYear((y) => y + 1); setMonth(1); }
     else setMonth((m) => m + 1);
   };
 
-  const startEdit = (cat: Category) => {
-    setEditing(cat);
-    setEditValue(expenses[cat] === 0 ? "" : String(expenses[cat]));
+  const startEdit = (name: string) => {
+    setEditing(name);
+    setEditValue(expenses[name] === 0 || expenses[name] == null ? "" : String(expenses[name]));
   };
 
-  const commitEdit = async (cat: Category) => {
-    const amount = parseInt(editValue.replace(/,/g, "")) || 0;
-    setEditing(null);
-    setEditValue("");
-    if (amount === expenses[cat]) return;
-    setSaving(cat);
+  const saveExpense = useCallback(async (name: string, amount: number) => {
+    setSaving(name);
     await fetch("/api/expenses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ year, month, category: cat, amount }),
+      body: JSON.stringify({ year, month, category: name, amount }),
     });
-    setExpenses((prev) => ({ ...prev, [cat]: amount }));
+    setExpenses((prev) => ({ ...prev, [name]: amount }));
     setSaving(null);
+  }, [year, month]);
+
+  const commitEdit = async (name: string) => {
+    const amount = parseInt(editValue.replace(/,/g, "")) || 0;
+    setEditing(null);
+    setEditValue("");
+    if (amount === (expenses[name] ?? 0)) return;
+    setUndoStack((prev) => [...prev.slice(-19), { category: name, amount: expenses[name] ?? 0 }]);
+    await saveExpense(name, amount);
   };
 
-  const total = CATEGORIES.reduce((sum, c) => sum + expenses[c], 0);
+  const undo = useCallback(async () => {
+    setUndoStack((prev) => {
+      if (prev.length === 0) return prev;
+      const last = prev[prev.length - 1];
+      saveExpense(last.category, last.amount);
+      return prev.slice(0, -1);
+    });
+  }, [saveExpense]);
 
-  const pieData = CATEGORIES.filter((c) => expenses[c] > 0).map((c) => ({
-    name: c,
-    value: expenses[c],
-  }));
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && e.target instanceof Element && e.target.tagName !== "INPUT") {
+        e.preventDefault();
+        undo();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo]);
+
+  const addCategory = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    await fetch("/api/budget/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    setNewName("");
+    setAdding(false);
+    loadCategories();
+  };
+
+  const deleteCategory = async (cat: BudgetCategory) => {
+    await fetch(`/api/budget/categories/${cat.id}`, { method: "DELETE" });
+    setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+    setExpenses((prev) => { const next = { ...prev }; delete next[cat.name]; return next; });
+    setDeleteTarget(null);
+  };
+
+  const total = categories.reduce((sum, c) => sum + (expenses[c.name] ?? 0), 0);
+  const pieData = categories
+    .map((c, i) => ({ name: c.name, value: expenses[c.name] ?? 0, color: PALETTE[i % PALETTE.length] }))
+    .filter((d) => d.value > 0);
 
   return (
     <div className="min-h-screen bg-zinc-950">
       <div className="max-w-lg mx-auto px-4 py-6 pb-10">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={prevMonth} className="text-zinc-400 hover:text-zinc-100 text-lg px-2 py-1 transition-colors">
-            ◀
-          </button>
-          <h1 className="text-lg font-bold text-zinc-100">
-            {year}년 {month}월
-          </h1>
-          <button onClick={nextMonth} className="text-zinc-400 hover:text-zinc-100 text-lg px-2 py-1 transition-colors">
-            ▶
-          </button>
+          <button onClick={prevMonth} className="text-zinc-400 hover:text-zinc-100 text-lg px-2 py-1 transition-colors">◀</button>
+          <h1 className="text-lg font-bold text-zinc-100">{year}년 {month}월</h1>
+          <button onClick={nextMonth} className="text-zinc-400 hover:text-zinc-100 text-lg px-2 py-1 transition-colors">▶</button>
         </div>
 
         <div className="grid grid-cols-3 gap-3 mb-5">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => startEdit(cat)}
-              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-left hover:border-zinc-600 transition-colors"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[cat] }} />
-                <span className="text-sm text-zinc-400">{cat}</span>
-                {saving === cat && <span className="ml-auto text-xs text-zinc-600">저장 중...</span>}
+          {categories.map((cat, i) => {
+            const color = PALETTE[i % PALETTE.length];
+            return (
+              <div
+                key={cat.id}
+                onClick={() => startEdit(cat.name)}
+                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-left hover:border-zinc-600 transition-colors relative group cursor-pointer"
+              >
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(cat); }}
+                  className="absolute top-2 right-2 text-zinc-700 hover:text-red-400 transition-colors text-base leading-none opacity-0 group-hover:opacity-100"
+                  title="삭제"
+                >
+                  ×
+                </button>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-sm text-zinc-400 truncate">{cat.name}</span>
+                  {saving === cat.name && <span className="ml-auto text-xs text-zinc-600">저장 중...</span>}
+                </div>
+                {editing === cat.name ? (
+                  <input
+                    ref={inputRef}
+                    type="number"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => commitEdit(cat.name)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitEdit(cat.name);
+                      if (e.key === "Escape") { setEditing(null); setEditValue(""); }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full bg-transparent text-zinc-100 font-semibold text-base outline-none border-b border-indigo-500 pb-0.5"
+                    placeholder="0"
+                  />
+                ) : (
+                  <p className={`font-semibold text-base ${(expenses[cat.name] ?? 0) === 0 ? "text-zinc-700" : "text-zinc-100"}`}>
+                    {formatAmount(expenses[cat.name] ?? 0)}
+                  </p>
+                )}
               </div>
-              {editing === cat ? (
-                <input
-                  ref={inputRef}
-                  type="number"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={() => commitEdit(cat)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitEdit(cat);
-                    if (e.key === "Escape") { setEditing(null); setEditValue(""); }
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-full bg-transparent text-zinc-100 font-semibold text-base outline-none border-b border-indigo-500 pb-0.5"
-                  placeholder="0"
-                />
-              ) : (
-                <p className={`font-semibold text-base ${expenses[cat] === 0 ? "text-zinc-700" : "text-zinc-100"}`}>
-                  {formatAmount(expenses[cat])}
-                </p>
-              )}
+            );
+          })}
+
+          {adding ? (
+            <div className="bg-zinc-900 border border-indigo-500 rounded-2xl p-4 flex flex-col gap-2">
+              <input
+                ref={addInputRef}
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") addCategory();
+                  if (e.key === "Escape") { setAdding(false); setNewName(""); }
+                }}
+                className="bg-transparent text-zinc-100 text-sm outline-none w-full"
+                placeholder="카테고리 이름"
+              />
+              <div className="flex gap-2">
+                <button onClick={addCategory} className="text-xs text-indigo-400 hover:text-indigo-300">추가</button>
+                <button onClick={() => { setAdding(false); setNewName(""); }} className="text-xs text-zinc-600 hover:text-zinc-400">취소</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="bg-zinc-900 border border-dashed border-zinc-700 rounded-2xl p-4 text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors text-sm"
+            >
+              + 추가
             </button>
-          ))}
+          )}
         </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-5">
           <div className="flex justify-between items-center">
             <span className="text-sm text-zinc-400">총 지출</span>
-            <span className="text-xl font-bold text-zinc-100">{formatAmount(total)}</span>
+            <div className="flex items-center gap-3">
+              {undoStack.length > 0 && (
+                <button
+                  onClick={undo}
+                  className="text-xs text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1"
+                  title="되돌리기 (Ctrl+Z)"
+                >
+                  ↩ 되돌리기
+                  {undoStack.length > 1 && <span className="text-zinc-600">({undoStack.length})</span>}
+                </button>
+              )}
+              <span className="text-xl font-bold text-zinc-100">{formatAmount(total)}</span>
+            </div>
           </div>
         </div>
 
@@ -150,17 +252,9 @@ export default function BudgetClient() {
             <h2 className="font-semibold text-zinc-100 mb-4">카테고리 비중</h2>
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={2} dataKey="value">
                   {pieData.map((entry) => (
-                    <Cell key={entry.name} fill={COLORS[entry.name as Category]} />
+                    <Cell key={entry.name} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -174,7 +268,7 @@ export default function BudgetClient() {
             <div className="grid grid-cols-3 gap-2 mt-2">
               {pieData.map((entry) => (
                 <div key={entry.name} className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[entry.name as Category] }} />
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
                   <span className="text-xs text-zinc-400 truncate">{entry.name}</span>
                   <span className="text-xs text-zinc-500 ml-auto">
                     {total > 0 ? Math.round((entry.value / total) * 100) : 0}%
@@ -188,7 +282,105 @@ export default function BudgetClient() {
             카테고리 카드를 눌러 지출을 입력해보세요
           </div>
         )}
+
+        {expenseHistory.length >= 2 && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-zinc-100">월별 지출 추이</h2>
+              <div className="flex gap-1">
+                {([{ label: "1년", months: 12 }, { label: "전체", months: 0 }] as const).map(({ label, months }) => (
+                  <button
+                    key={months}
+                    onClick={() => setHistoryPeriod(months)}
+                    className={`text-xs px-3 py-1 rounded-full transition-colors ${
+                      historyPeriod === months
+                        ? "bg-zinc-600 text-zinc-100"
+                        : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart
+                data={historyPeriod === 0 ? expenseHistory : expenseHistory.slice(-historyPeriod)}
+                margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval={Math.max(0, Math.ceil((historyPeriod === 0 ? expenseHistory.length : Math.min(expenseHistory.length, historyPeriod)) / 6) - 1)}
+                />
+                <YAxis
+                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={52}
+                  domain={[
+                    (min: number) => Math.floor(min * 0.998),
+                    (max: number) => Math.ceil(max * 1.002),
+                  ]}
+                  tickFormatter={(v) => {
+                    if (v >= 100000000) return `${(v / 100000000).toFixed(1)}억`;
+                    if (v >= 10000) return `${(v / 10000).toFixed(0)}만`;
+                    return String(v);
+                  }}
+                />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const entry = payload[0].payload as ExpenseHistory;
+                    return (
+                      <div className="bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs">
+                        <p className="text-zinc-400 mb-1">{entry.label}</p>
+                        <p className="text-zinc-100 font-semibold">{formatAmount(entry.total)}</p>
+                        {entry.change !== null && (
+                          <p className={entry.change >= 0 ? "text-red-400" : "text-emerald-400"}>
+                            {entry.change >= 0 ? "+" : ""}{formatAmount(entry.change)}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+                <Line type="monotone" dataKey="total" stroke="#f59e0b" strokeWidth={2} dot={{ fill: "#f59e0b", r: 3 }} activeDot={{ r: 5 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 px-6" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <p className="text-zinc-100 font-semibold mb-1">카테고리 삭제</p>
+            <p className="text-sm text-zinc-400 mb-6">
+              정말로 <span className="text-zinc-100 font-medium">'{deleteTarget.name}'</span> 카테고리를 삭제할까요?<br />
+              <span className="text-red-400">모든 월의 지출 데이터도 함께 삭제돼요.</span>
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 py-2 rounded-xl bg-zinc-800 text-zinc-300 text-sm hover:bg-zinc-700 transition-colors"
+              >
+                취소
+              </button>
+              <button
+                onClick={() => deleteCategory(deleteTarget)}
+                className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm hover:bg-red-600 transition-colors"
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

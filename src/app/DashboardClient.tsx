@@ -103,27 +103,28 @@ export default function DashboardClient({ records, stats, memos }: { records: Re
           <div className="mt-5 bg-zinc-900 rounded-2xl p-4 border border-zinc-800">
             <h2 className="font-semibold text-zinc-100 mb-3">기록 목록</h2>
             <div className="space-y-1">
-              {[...records].reverse().map((r) => (
-                <div key={r.id} className="flex justify-between items-center text-sm py-2 border-b border-zinc-800 last:border-0">
-                  <span className="text-zinc-500 w-24">{r.date}</span>
-                  <span className="font-medium text-zinc-200 flex-1 text-right">
-                    {r.amount.toLocaleString("ko-KR")}원
-                  </span>
-                  <span
-                    className={`w-16 text-right font-medium ${
-                      r.dailyReturn === null
-                        ? "text-zinc-700"
-                        : r.dailyReturn > 0
-                          ? "text-emerald-400"
-                          : r.dailyReturn < 0
-                            ? "text-red-400"
-                            : "text-zinc-400"
-                    }`}
-                  >
-                    {r.dailyReturn === null
-                      ? "-"
-                      : `${r.dailyReturn > 0 ? "+" : ""}${r.dailyReturn.toFixed(2)}%`}
-                  </span>
+              {[...records].reverse().map((r, i, arr) => {
+                const prev = arr[i + 1];
+                const amountChange = prev ? r.amount - prev.amount : null;
+                return (
+                <div key={r.id} className="flex items-center gap-2 py-2 border-b border-zinc-800 last:border-0">
+                  <span className="text-xs text-zinc-500 shrink-0">{r.date}</span>
+                  <div className="flex items-center gap-2 flex-1 justify-end">
+                    <span className="text-sm font-medium text-zinc-200">{r.amount.toLocaleString("ko-KR")}원</span>
+                    {amountChange !== null && (
+                      <span className={`text-xs ${amountChange > 0 ? "text-emerald-400" : amountChange < 0 ? "text-red-400" : "text-zinc-600"}`}>
+                        {amountChange > 0 ? "+" : ""}{amountChange.toLocaleString("ko-KR")}원
+                      </span>
+                    )}
+                    <span className={`text-xs ${
+                      r.dailyReturn === null ? "text-zinc-700"
+                        : r.dailyReturn > 0 ? "text-emerald-400"
+                        : r.dailyReturn < 0 ? "text-red-400"
+                        : "text-zinc-400"
+                    }`}>
+                      {r.dailyReturn === null ? "-" : `${r.dailyReturn > 0 ? "+" : ""}${r.dailyReturn.toFixed(2)}%`}
+                    </span>
+                  </div>
                   <button
                     onClick={() => {
                       setEditTarget({ date: r.date, amount: r.amount });
@@ -135,7 +136,8 @@ export default function DashboardClient({ records, stats, memos }: { records: Re
                     ✎
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

@@ -43,6 +43,7 @@ export default function AssetsClient() {
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const [historyPeriod, setHistoryPeriod] = useState(12);
 
   const loadItems = useCallback(() => {
     fetch("/api/assets/items")
@@ -334,15 +335,42 @@ export default function AssetsClient() {
 
         {history.length >= 2 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-5">
-            <h2 className="font-semibold text-zinc-100 mb-3">월별 자산 추이</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-zinc-100">월별 자산 추이</h2>
+              <div className="flex gap-1">
+                {([{ label: "1년", months: 12 }, { label: "전체", months: 0 }] as const).map(({ label, months }) => (
+                  <button
+                    key={months}
+                    onClick={() => setHistoryPeriod(months)}
+                    className={`text-xs px-3 py-1 rounded-full transition-colors ${
+                      historyPeriod === months
+                        ? "bg-zinc-600 text-zinc-100"
+                        : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {selectedItems.size < items.length && total > 0 && (() => {
+              const selectedTotal = items
+                .filter((item) => selectedItems.has(item.id))
+                .reduce((sum, item) => sum + (records[item.id] ?? 0), 0);
+              const pct = (selectedTotal / total) * 100;
+              return (
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs text-zinc-500">선택 합계</span>
+                  <span className="text-xs font-medium text-zinc-200">{formatAmount(selectedTotal)}</span>
+                  <span className="text-xs text-zinc-500">({pct.toFixed(1)}%)</span>
+                </div>
+              );
+            })()}
 
             <div className="flex flex-wrap gap-2 mb-4">
               <button
-                onClick={() =>
-                  setSelectedItems(
-                    selectedItems.size === items.length ? new Set() : new Set(items.map((i) => i.id))
-                  )
-                }
+                onClick={() => setSelectedItems(new Set(items.map((i) => i.id)))}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                   selectedItems.size === items.length
                     ? "bg-indigo-500 text-white"
@@ -359,8 +387,13 @@ export default function AssetsClient() {
                     key={item.id}
                     onClick={() => {
                       setSelectedItems((prev) => {
+                        // 전체 선택 상태에서 클릭 → solo
+                        if (prev.size === items.length) return new Set([item.id]);
+                        // solo 상태에서 자기 자신 클릭 → 전체로 복귀
+                        if (prev.size === 1 && prev.has(item.id)) return new Set(items.map((i) => i.id));
+                        // 그 외 → 일반 토글
                         const next = new Set(prev);
-                        if (next.has(item.id)) { next.delete(item.id); } else { next.add(item.id); }
+                        if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
                         return next;
                       });
                     }}
@@ -376,14 +409,24 @@ export default function AssetsClient() {
             </div>
 
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <LineChart data={historyPeriod === 0 ? chartData : chartData.slice(-historyPeriod)} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis dataKey="label" tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: "#71717a", fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval={Math.max(0, Math.ceil((historyPeriod === 0 ? chartData.length : Math.min(chartData.length, historyPeriod)) / 6) - 1)}
+                />
                 <YAxis
                   tick={{ fill: "#71717a", fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                   width={52}
+                  domain={[
+                    (min: number) => Math.floor(min * 0.998),
+                    (max: number) => Math.ceil(max * 1.002),
+                  ]}
                   tickFormatter={(v) => {
                     if (v >= 100000000) return `${(v / 100000000).toFixed(1)}억`;
                     if (v >= 10000) return `${(v / 10000).toFixed(0)}만`;
@@ -412,25 +455,39 @@ export default function AssetsClient() {
             </ResponsiveContainer>
 
             <div className="mt-4 border-t border-zinc-800 pt-4">
-              <div className="grid grid-cols-3 text-xs text-zinc-600 mb-2 px-1">
+              <div className="grid grid-cols-4 text-xs text-zinc-600 mb-2 px-1">
                 <span>월</span>
                 <span className="text-right">총 자산</span>
                 <span className="text-right">증감</span>
+                <span className="text-right">증감률</span>
               </div>
               <div className="space-y-1">
-                {chartData.map((entry) => (
-                  <div key={entry.label} className="grid grid-cols-3 text-sm px-1 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
-                    <span className="text-zinc-400 text-xs self-center">{entry.label}</span>
-                    <span className="text-zinc-200 text-right text-xs self-center">{formatAmount(entry.displayTotal)}</span>
-                    {entry.change === null ? (
-                      <span className="text-zinc-700 text-right text-xs self-center">—</span>
-                    ) : (
-                      <span className={`text-right text-xs font-medium self-center ${entry.change > 0 ? "text-emerald-400" : entry.change < 0 ? "text-red-400" : "text-zinc-500"}`}>
-                        {entry.change > 0 ? "+" : ""}{formatAmount(entry.change)}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                {(historyPeriod === 0 ? chartData : chartData.slice(-historyPeriod)).slice().reverse().map((entry) => {
+                  const prevTotal = entry.change !== null ? entry.displayTotal - entry.change : null;
+                  const pct = prevTotal ? (entry.change! / prevTotal) * 100 : null;
+                  const color = entry.change === null || entry.change === 0 ? "text-zinc-500"
+                    : entry.change > 0 ? "text-emerald-400" : "text-red-400";
+                  return (
+                    <div key={entry.label} className="grid grid-cols-4 text-sm px-1 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
+                      <span className="text-zinc-400 text-xs self-center">{entry.label}</span>
+                      <span className="text-zinc-200 text-right text-xs self-center">{formatAmount(entry.displayTotal)}</span>
+                      {entry.change === null ? (
+                        <span className="text-zinc-700 text-right text-xs self-center">—</span>
+                      ) : (
+                        <span className={`text-right text-xs font-medium self-center ${color}`}>
+                          {entry.change > 0 ? "+" : ""}{formatAmount(entry.change)}
+                        </span>
+                      )}
+                      {pct === null ? (
+                        <span className="text-zinc-700 text-right text-xs self-center">—</span>
+                      ) : (
+                        <span className={`text-right text-xs font-medium self-center ${color}`}>
+                          {pct > 0 ? "+" : ""}{pct.toFixed(2)}%
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
