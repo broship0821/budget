@@ -3,6 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import GoalCard from "@/components/GoalCard";
+import {
+  DUMMY_ASSET_ITEMS,
+  DUMMY_ASSET_RECORDS,
+  DUMMY_ASSET_HISTORY,
+} from "@/lib/dummy";
 
 interface AssetItem {
   id: number;
@@ -19,30 +24,33 @@ interface HistoryEntry {
   change: number | null;
 }
 
+interface AssetsClientProps {
+  isAuthed: boolean;
+  initialTargetAmount: number | null;
+  initialTargetReturn: number | null;
+}
+
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#f97316", "#14b8a6", "#6366f1"];
 
 function formatAmount(n: number) {
   return n.toLocaleString("ko-KR") + "원";
 }
 
-interface AssetsClientProps {
-  initialTargetAmount: number | null;
-  initialTargetReturn: number | null;
-}
-
-export default function AssetsClient({ initialTargetAmount, initialTargetReturn }: AssetsClientProps) {
+export default function AssetsClient({ isAuthed, initialTargetAmount, initialTargetReturn }: AssetsClientProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [items, setItems] = useState<AssetItem[]>([]);
-  const [records, setRecords] = useState<Record<number, number>>({});
+  const [items, setItems] = useState<AssetItem[]>(() => isAuthed ? [] : DUMMY_ASSET_ITEMS);
+  const [records, setRecords] = useState<Record<number, number>>(() => isAuthed ? {} : DUMMY_ASSET_RECORDS);
+  const [history, setHistory] = useState<HistoryEntry[]>(() => isAuthed ? [] : DUMMY_ASSET_HISTORY);
 
   const [editing, setEditing] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
 
-  const [recordedAt, setRecordedAt] = useState<string | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [recordedAt, setRecordedAt] = useState<string | null>(() =>
+    isAuthed ? null : "2026-05-10T09:00:00.000Z"
+  );
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<AssetItem | null>(null);
@@ -52,12 +60,14 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
   const [historyPeriod, setHistoryPeriod] = useState(12);
 
   const loadItems = useCallback(() => {
+    if (!isAuthed) return;
     fetch("/api/assets/items")
       .then((r) => r.json())
       .then(setItems);
-  }, []);
+  }, [isAuthed]);
 
   const loadRecords = useCallback(() => {
+    if (!isAuthed) return;
     fetch(`/api/assets/records?year=${year}&month=${month}`)
       .then((r) => r.json())
       .then((data: { items: { itemId: number; amount: number }[]; recordedAt: string | null }) => {
@@ -66,13 +76,14 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
         setRecords(map);
         setRecordedAt(data.recordedAt);
       });
-  }, [year, month]);
+  }, [year, month, isAuthed]);
 
   useEffect(() => { loadItems(); }, [loadItems]);
   useEffect(() => { loadRecords(); }, [loadRecords]);
   useEffect(() => {
+    if (!isAuthed) return;
     fetch("/api/assets/history").then((r) => r.json()).then(setHistory);
-  }, [records]);
+  }, [records, isAuthed]);
   useEffect(() => {
     setSelectedItems(new Set(items.map((i) => i.id)));
   }, [items]);
@@ -88,11 +99,13 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
   };
 
   const startEdit = (itemId: number) => {
+    if (!isAuthed) return;
     setEditing(itemId);
     setEditValue(records[itemId] ? String(records[itemId]) : "");
   };
 
   const commitEdit = async (itemId: number) => {
+    if (!isAuthed) return;
     const amount = parseInt(editValue.replace(/,/g, "")) || 0;
     setEditing(null);
     setEditValue("");
@@ -107,6 +120,7 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
   };
 
   const addItem = async () => {
+    if (!isAuthed) return;
     const name = newName.trim();
     if (!name) return;
     await fetch("/api/assets/items", {
@@ -120,6 +134,7 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
   };
 
   const onDragStart = (e: React.DragEvent, id: number) => {
+    if (!isAuthed) return;
     setDragId(id);
     e.dataTransfer.effectAllowed = "move";
   };
@@ -131,7 +146,7 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
 
   const onDrop = async (e: React.DragEvent, targetId: number) => {
     e.preventDefault();
-    if (dragId === null || dragId === targetId) { setDragId(null); setDragOverId(null); return; }
+    if (!isAuthed || dragId === null || dragId === targetId) { setDragId(null); setDragOverId(null); return; }
 
     const from = items.findIndex((i) => i.id === dragId);
     const to = items.findIndex((i) => i.id === targetId);
@@ -151,6 +166,7 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
   };
 
   const copyFromPrevMonth = async () => {
+    if (!isAuthed) return;
     const prevYear = month === 1 ? year - 1 : year;
     const prevMonth = month === 1 ? 12 : month - 1;
     const res = await fetch("/api/assets/copy", {
@@ -167,6 +183,7 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
   };
 
   const deleteItem = async (id: number) => {
+    if (!isAuthed) return;
     await fetch(`/api/assets/items/${id}`, { method: "DELETE" });
     setItems((prev) => prev.filter((item) => item.id !== id));
     setRecords((prev) => { const next = { ...prev }; delete next[id]; return next; });
@@ -202,13 +219,15 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-5">
           <div className="flex justify-between items-center">
             <span className="text-sm text-zinc-400">총 자산</span>
-            <button
-              onClick={copyFromPrevMonth}
-              className="text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
-              title="전월 데이터를 현재 달로 복사"
-            >
-              전월 복사
-            </button>
+            {isAuthed && (
+              <button
+                onClick={copyFromPrevMonth}
+                className="text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
+                title="전월 데이터를 현재 달로 복사"
+              >
+                전월 복사
+              </button>
+            )}
             <span className="text-xl font-bold text-zinc-100">{formatAmount(total)}</span>
           </div>
           {recordedAt && (
@@ -231,10 +250,10 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
                   } ${dragOverId === item.id && dragId !== item.id ? "border-t-2 border-indigo-500" : ""}`}
                 >
                   <div
-                    draggable
+                    draggable={isAuthed}
                     onDragStart={(e) => onDragStart(e, item.id)}
                     onDragEnd={() => { setDragId(null); setDragOverId(null); }}
-                    className="cursor-grab active:cursor-grabbing mr-3 text-zinc-700 hover:text-zinc-500 select-none flex-shrink-0"
+                    className={`${isAuthed ? "cursor-grab active:cursor-grabbing" : "cursor-default"} mr-3 text-zinc-700 hover:text-zinc-500 select-none flex-shrink-0`}
                   >
                     <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
                       <circle cx="3" cy="2.5" r="1.5"/><circle cx="7" cy="2.5" r="1.5"/>
@@ -245,7 +264,7 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
                   <span className="w-2 h-2 rounded-full flex-shrink-0 mr-3" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                   <span className="text-sm text-zinc-300 flex-1">{item.name}</span>
                   <div className="flex items-center gap-3">
-                    {editing === item.id ? (
+                    {isAuthed && editing === item.id ? (
                       <input
                         ref={editRef}
                         type="number"
@@ -262,18 +281,21 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
                     ) : (
                       <button
                         onClick={() => startEdit(item.id)}
-                        className={`text-sm font-medium ${records[item.id] ? "text-zinc-200" : "text-zinc-600"} hover:text-zinc-100 transition-colors`}
+                        disabled={!isAuthed}
+                        className={`text-sm font-medium ${records[item.id] ? "text-zinc-200" : "text-zinc-600"} ${isAuthed ? "hover:text-zinc-100 transition-colors" : "cursor-default"}`}
                       >
                         {formatAmount(records[item.id] ?? 0)}
                       </button>
                     )}
-                    <button
-                      onClick={() => setDeleteTarget(item)}
-                      className="text-zinc-700 hover:text-red-400 transition-colors text-base leading-none"
-                      title="삭제"
-                    >
-                      ×
-                    </button>
+                    {isAuthed && (
+                      <button
+                        onClick={() => setDeleteTarget(item)}
+                        className="text-zinc-700 hover:text-red-400 transition-colors text-base leading-none"
+                        title="삭제"
+                      >
+                        ×
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -281,39 +303,43 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
           </div>
         )}
 
-        {adding ? (
-          <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 mb-5">
-            <input
-              autoFocus
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addItem();
-                if (e.key === "Escape") { setAdding(false); setNewName(""); }
-              }}
-              className="flex-1 bg-transparent text-zinc-100 text-sm outline-none"
-              placeholder="항목 이름 (예: 주식계좌)"
-            />
-            <button onClick={addItem} className="text-xs text-indigo-400 hover:text-indigo-300 px-2">추가</button>
-            <button onClick={() => { setAdding(false); setNewName(""); }} className="text-xs text-zinc-600 hover:text-zinc-400">취소</button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setAdding(true)}
-            className="w-full border border-dashed border-zinc-700 rounded-2xl py-3 text-sm text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors mb-5"
-          >
-            + 항목 추가
-          </button>
+        {isAuthed && (
+          adding ? (
+            <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 mb-5">
+              <input
+                autoFocus
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") addItem();
+                  if (e.key === "Escape") { setAdding(false); setNewName(""); }
+                }}
+                className="flex-1 bg-transparent text-zinc-100 text-sm outline-none"
+                placeholder="항목 이름 (예: 주식계좌)"
+              />
+              <button onClick={addItem} className="text-xs text-indigo-400 hover:text-indigo-300 px-2">추가</button>
+              <button onClick={() => { setAdding(false); setNewName(""); }} className="text-xs text-zinc-600 hover:text-zinc-400">취소</button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="w-full border border-dashed border-zinc-700 rounded-2xl py-3 text-sm text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors mb-5"
+            >
+              + 항목 추가
+            </button>
+          )
         )}
 
-        <div className="mb-5">
-          <GoalCard
-            initialTargetAmount={initialTargetAmount}
-            initialTargetReturn={initialTargetReturn}
-            currentAmount={total}
-          />
-        </div>
+        {isAuthed && (
+          <div className="mb-5">
+            <GoalCard
+              initialTargetAmount={initialTargetAmount}
+              initialTargetReturn={initialTargetReturn}
+              currentAmount={total}
+            />
+          </div>
+        )}
 
         {pieData.length > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
@@ -401,11 +427,8 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
                     key={item.id}
                     onClick={() => {
                       setSelectedItems((prev) => {
-                        // 전체 선택 상태에서 클릭 → solo
                         if (prev.size === items.length) return new Set([item.id]);
-                        // solo 상태에서 자기 자신 클릭 → 전체로 복귀
                         if (prev.size === 1 && prev.has(item.id)) return new Set(items.map((i) => i.id));
-                        // 그 외 → 일반 토글
                         const next = new Set(prev);
                         if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
                         return next;
@@ -507,7 +530,7 @@ export default function AssetsClient({ initialTargetAmount, initialTargetReturn 
           </div>
         )}
 
-        {items.length === 0 && !adding && (
+        {isAuthed && items.length === 0 && !adding && (
           <p className="text-center text-sm text-zinc-600 mt-6">
             항목을 추가해 자산을 기록해보세요
           </p>

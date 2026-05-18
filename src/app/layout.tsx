@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
+import { getIsAuthed } from "@/lib/auth";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,11 +19,13 @@ export const metadata: Metadata = {
   description: "일일 주식 잔고 및 수익률 기록",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isAuthed = await getIsAuthed();
+
   return (
     <html
       lang="ko"
@@ -30,9 +33,9 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-          <Navbar />
-          {children}
-        </body>
+        <Navbar isAuthed={isAuthed} />
+        {children}
+      </body>
     </html>
   );
 }

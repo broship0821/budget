@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getIsAuthed } from "@/lib/auth";
 import AssetsClient from "./AssetsClient";
 
 async function getGoals() {
@@ -14,6 +15,18 @@ async function getGoals() {
 }
 
 export default async function AssetsPage() {
+  const isAuthed = await getIsAuthed();
+
+  if (!isAuthed) {
+    return <AssetsClient isAuthed={false} initialTargetAmount={null} initialTargetReturn={null} />;
+  }
+
   const goals = await getGoals();
-  return <AssetsClient initialTargetAmount={goals.targetAmount} initialTargetReturn={goals.targetReturn} />;
+  return (
+    <AssetsClient
+      isAuthed={true}
+      initialTargetAmount={goals.targetAmount}
+      initialTargetReturn={goals.targetReturn}
+    />
+  );
 }

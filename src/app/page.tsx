@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { getIsAuthed } from "@/lib/auth";
+import { DUMMY_PORTFOLIO_RECORDS, DUMMY_MEMOS } from "@/lib/dummy";
 import DashboardClient from "./DashboardClient";
 
 async function getRecords() {
@@ -66,8 +68,15 @@ async function getMemos() {
 }
 
 export default async function Home() {
+  const isAuthed = await getIsAuthed();
+
+  if (!isAuthed) {
+    const records = DUMMY_PORTFOLIO_RECORDS;
+    const stats = getStats(records);
+    return <DashboardClient records={records} stats={stats} memos={DUMMY_MEMOS} />;
+  }
+
   const [records, memos] = await Promise.all([getRecords(), getMemos()]);
   const stats = getStats(records);
-
   return <DashboardClient records={records} stats={stats} memos={memos} />;
 }

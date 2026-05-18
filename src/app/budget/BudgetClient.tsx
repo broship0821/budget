@@ -2,6 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+import {
+  DUMMY_BUDGET_CATEGORIES,
+  DUMMY_EXPENSES,
+  DUMMY_EXPENSE_HISTORY,
+} from "@/lib/dummy";
 
 const PALETTE = ["#3b82f6", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6", "#f97316", "#14b8a6", "#6366f1", "#ef4444", "#84cc16"];
 
@@ -23,12 +28,12 @@ function formatAmount(n: number) {
   return n.toLocaleString("ko-KR") + "원";
 }
 
-export default function BudgetClient() {
+export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
-  const [categories, setCategories] = useState<BudgetCategory[]>([]);
-  const [expenses, setExpenses] = useState<Record<string, number>>({});
+  const [categories, setCategories] = useState<BudgetCategory[]>(() => isAuthed ? [] : DUMMY_BUDGET_CATEGORIES);
+  const [expenses, setExpenses] = useState<Record<string, number>>(() => isAuthed ? {} : DUMMY_EXPENSES);
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
@@ -36,19 +41,22 @@ export default function BudgetClient() {
   const [newName, setNewName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<BudgetCategory | null>(null);
   const [undoStack, setUndoStack] = useState<{ category: string; amount: number }[]>([]);
-  const [expenseHistory, setExpenseHistory] = useState<ExpenseHistory[]>([]);
+  const [expenseHistory, setExpenseHistory] = useState<ExpenseHistory[]>(() => isAuthed ? [] : DUMMY_EXPENSE_HISTORY);
   const [historyPeriod, setHistoryPeriod] = useState(12);
   const inputRef = useRef<HTMLInputElement>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
 
-  const loadCategories = () =>
+  const loadCategories = () => {
+    if (!isAuthed) return;
     fetch("/api/budget/categories")
       .then((r) => r.json())
       .then(setCategories);
+  };
 
   useEffect(() => { loadCategories(); }, []);
 
   useEffect(() => {
+    if (!isAuthed) return;
     setUndoStack([]);
     fetch(`/api/expenses?year=${year}&month=${month}`)
       .then((r) => r.json())
@@ -57,11 +65,12 @@ export default function BudgetClient() {
         for (const e of data) next[e.category] = e.amount;
         setExpenses(next);
       });
-  }, [year, month]);
+  }, [year, month, isAuthed]);
 
   useEffect(() => {
+    if (!isAuthed) return;
     fetch("/api/expenses/history").then((r) => r.json()).then(setExpenseHistory);
-  }, [expenses]);
+  }, [expenses, isAuthed]);
 
   useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
   useEffect(() => { if (adding) addInputRef.current?.focus(); }, [adding]);
@@ -76,11 +85,13 @@ export default function BudgetClient() {
   };
 
   const startEdit = (name: string) => {
+    if (!isAuthed) return;
     setEditing(name);
     setEditValue(expenses[name] === 0 || expenses[name] == null ? "" : String(expenses[name]));
   };
 
   const saveExpense = useCallback(async (name: string, amount: number) => {
+    if (!isAuthed) return;
     setSaving(name);
     await fetch("/api/expenses", {
       method: "POST",
@@ -89,9 +100,10 @@ export default function BudgetClient() {
     });
     setExpenses((prev) => ({ ...prev, [name]: amount }));
     setSaving(null);
-  }, [year, month]);
+  }, [year, month, isAuthed]);
 
   const commitEdit = async (name: string) => {
+    if (!isAuthed) return;
     const amount = parseInt(editValue.replace(/,/g, "")) || 0;
     setEditing(null);
     setEditValue("");
@@ -101,15 +113,17 @@ export default function BudgetClient() {
   };
 
   const undo = useCallback(async () => {
+    if (!isAuthed) return;
     setUndoStack((prev) => {
       if (prev.length === 0) return prev;
       const last = prev[prev.length - 1];
       saveExpense(last.category, last.amount);
       return prev.slice(0, -1);
     });
-  }, [saveExpense]);
+  }, [saveExpense, isAuthed]);
 
   useEffect(() => {
+    if (!isAuthed) return;
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && e.target instanceof Element && e.target.tagName !== "INPUT") {
         e.preventDefault();
@@ -118,9 +132,10 @@ export default function BudgetClient() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [undo]);
+  }, [undo, isAuthed]);
 
   const addCategory = async () => {
+    if (!isAuthed) return;
     const name = newName.trim();
     if (!name) return;
     await fetch("/api/budget/categories", {
@@ -134,6 +149,7 @@ export default function BudgetClient() {
   };
 
   const deleteCategory = async (cat: BudgetCategory) => {
+    if (!isAuthed) return;
     await fetch(`/api/budget/categories/${cat.id}`, { method: "DELETE" });
     setCategories((prev) => prev.filter((c) => c.id !== cat.id));
     setExpenses((prev) => { const next = { ...prev }; delete next[cat.name]; return next; });
@@ -161,21 +177,23 @@ export default function BudgetClient() {
               <div
                 key={cat.id}
                 onClick={() => startEdit(cat.name)}
-                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-left hover:border-zinc-600 transition-colors relative group cursor-pointer"
+                className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-left transition-colors relative group ${isAuthed ? "hover:border-zinc-600 cursor-pointer" : "cursor-default"}`}
               >
-                <button
-                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(cat); }}
-                  className="absolute top-2 right-2 text-zinc-700 hover:text-red-400 transition-colors text-base leading-none opacity-0 group-hover:opacity-100"
-                  title="삭제"
-                >
-                  ×
-                </button>
+                {isAuthed && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(cat); }}
+                    className="absolute top-2 right-2 text-zinc-700 hover:text-red-400 transition-colors text-base leading-none opacity-0 group-hover:opacity-100"
+                    title="삭제"
+                  >
+                    ×
+                  </button>
+                )}
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
                   <span className="text-sm text-zinc-400 truncate">{cat.name}</span>
                   {saving === cat.name && <span className="ml-auto text-xs text-zinc-600">저장 중...</span>}
                 </div>
-                {editing === cat.name ? (
+                {isAuthed && editing === cat.name ? (
                   <input
                     ref={inputRef}
                     type="number"
@@ -199,32 +217,34 @@ export default function BudgetClient() {
             );
           })}
 
-          {adding ? (
-            <div className="bg-zinc-900 border border-indigo-500 rounded-2xl p-4 flex flex-col gap-2">
-              <input
-                ref={addInputRef}
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") addCategory();
-                  if (e.key === "Escape") { setAdding(false); setNewName(""); }
-                }}
-                className="bg-transparent text-zinc-100 text-sm outline-none w-full"
-                placeholder="카테고리 이름"
-              />
-              <div className="flex gap-2">
-                <button onClick={addCategory} className="text-xs text-indigo-400 hover:text-indigo-300">추가</button>
-                <button onClick={() => { setAdding(false); setNewName(""); }} className="text-xs text-zinc-600 hover:text-zinc-400">취소</button>
+          {isAuthed && (
+            adding ? (
+              <div className="bg-zinc-900 border border-indigo-500 rounded-2xl p-4 flex flex-col gap-2">
+                <input
+                  ref={addInputRef}
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addCategory();
+                    if (e.key === "Escape") { setAdding(false); setNewName(""); }
+                  }}
+                  className="bg-transparent text-zinc-100 text-sm outline-none w-full"
+                  placeholder="카테고리 이름"
+                />
+                <div className="flex gap-2">
+                  <button onClick={addCategory} className="text-xs text-indigo-400 hover:text-indigo-300">추가</button>
+                  <button onClick={() => { setAdding(false); setNewName(""); }} className="text-xs text-zinc-600 hover:text-zinc-400">취소</button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setAdding(true)}
-              className="bg-zinc-900 border border-dashed border-zinc-700 rounded-2xl p-4 text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors text-sm"
-            >
-              + 추가
-            </button>
+            ) : (
+              <button
+                onClick={() => setAdding(true)}
+                className="bg-zinc-900 border border-dashed border-zinc-700 rounded-2xl p-4 text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors text-sm"
+              >
+                + 추가
+              </button>
+            )
           )}
         </div>
 
@@ -232,7 +252,7 @@ export default function BudgetClient() {
           <div className="flex justify-between items-center">
             <span className="text-sm text-zinc-400">총 지출</span>
             <div className="flex items-center gap-3">
-              {undoStack.length > 0 && (
+              {isAuthed && undoStack.length > 0 && (
                 <button
                   onClick={undo}
                   className="text-xs text-zinc-500 hover:text-amber-400 transition-colors flex items-center gap-1"
