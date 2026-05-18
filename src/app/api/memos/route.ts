@@ -12,7 +12,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const { key, content } = await req.json();
-  if (key !== "goal" && key !== "thought") {
+  const VALID_KEYS = ["goal", "thought", "target_amount", "target_return"];
+  if (!VALID_KEYS.includes(key)) {
     return NextResponse.json({ error: "invalid key" }, { status: 400 });
   }
   const memo = await prisma.memo.upsert({

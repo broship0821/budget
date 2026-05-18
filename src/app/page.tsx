@@ -58,9 +58,9 @@ function getStats(records: ReturnType<typeof getRecords> extends Promise<infer T
 
 async function getMemos() {
   const memos = await prisma.memo.findMany();
-  const result = { goal: "", thought: "" };
+  const result = { goal: "", thought: "", target_amount: "", target_return: "" };
   for (const m of memos) {
-    if (m.key === "goal" || m.key === "thought") result[m.key] = m.content;
+    if (m.key in result) result[m.key as keyof typeof result] = m.content;
   }
   return result;
 }
