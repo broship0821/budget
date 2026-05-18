@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
+import GoalCard from "@/components/GoalCard";
 
 interface AssetItem {
   id: number;
@@ -24,7 +25,12 @@ function formatAmount(n: number) {
   return n.toLocaleString("ko-KR") + "원";
 }
 
-export default function AssetsClient() {
+interface AssetsClientProps {
+  initialTargetAmount: number | null;
+  initialTargetReturn: number | null;
+}
+
+export default function AssetsClient({ initialTargetAmount, initialTargetReturn }: AssetsClientProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -300,6 +306,14 @@ export default function AssetsClient() {
             + 항목 추가
           </button>
         )}
+
+        <div className="mb-5">
+          <GoalCard
+            initialTargetAmount={initialTargetAmount}
+            initialTargetReturn={initialTargetReturn}
+            currentAmount={total}
+          />
+        </div>
 
         {pieData.length > 0 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">

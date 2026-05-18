@@ -6,7 +6,19 @@ interface GoalCardProps {
   initialTargetAmount: number | null;
   initialTargetReturn: number | null;
   currentAmount: number | null;
-  currentYearlyReturn: number | null;
+  currentYearlyReturn?: number | null;
+}
+
+function formatKorean(n: number): string {
+  if (n === 0) return "0원";
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  const eok = Math.floor(abs / 100_000_000);
+  const man = Math.floor((abs % 100_000_000) / 10_000);
+  if (eok > 0 && man > 0) return `${sign}${eok}억 ${man.toLocaleString("ko-KR")}만원`;
+  if (eok > 0) return `${sign}${eok}억원`;
+  if (man > 0) return `${sign}${man.toLocaleString("ko-KR")}만원`;
+  return `${sign}${abs.toLocaleString("ko-KR")}원`;
 }
 
 async function saveMemo(key: string, content: string) {
@@ -27,7 +39,7 @@ export default function GoalCard({ initialTargetAmount, initialTargetReturn, cur
   const amountRef = useRef<HTMLInputElement>(null);
   const returnRef = useRef<HTMLInputElement>(null);
 
-  const pct = targetAmount && currentAmount ? (currentAmount / targetAmount) * 100 : 0;
+  const pct = targetAmount && currentAmount != null ? (currentAmount / targetAmount) * 100 : 0;
   const barPct = Math.min(pct, 100);
   const exceeded = pct >= 100;
 
@@ -71,6 +83,7 @@ export default function GoalCard({ initialTargetAmount, initialTargetReturn, cur
     <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
       <h2 className="font-semibold text-zinc-100 mb-4">목표 트래킹</h2>
 
+      {/* 목표 금액 */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-zinc-500">목표 금액</span>
@@ -93,7 +106,7 @@ export default function GoalCard({ initialTargetAmount, initialTargetReturn, cur
               onClick={startEditAmount}
               className={`text-sm font-medium transition-colors hover:text-indigo-400 ${targetAmount ? "text-zinc-100" : "text-zinc-600"}`}
             >
-              {targetAmount ? targetAmount.toLocaleString("ko-KR") + "원" : "목표 설정"}
+              {targetAmount ? formatKorean(targetAmount) : "목표 설정"}
             </button>
           )}
         </div>
@@ -107,23 +120,27 @@ export default function GoalCard({ initialTargetAmount, initialTargetReturn, cur
               />
             </div>
             <div className="flex items-center justify-between">
-              <span className={`text-sm font-bold ${exceeded ? "text-emerald-400" : "text-zinc-200"}`}>
-                {exceeded ? "목표 달성!" : `${Math.floor(pct)}%`}
-              </span>
+              <div>
+                <span className={`text-sm font-bold ${exceeded ? "text-emerald-400" : "text-zinc-200"}`}>
+                  {exceeded ? "목표 달성!" : `${Math.floor(pct)}%`}
+                </span>
+                <span className="text-xs text-zinc-600 ml-2">{formatKorean(currentAmount)}</span>
+              </div>
               <span className="text-xs text-zinc-500">
                 {exceeded
-                  ? `+${(currentAmount - targetAmount).toLocaleString("ko-KR")}원 초과`
-                  : `남은 금액 ${(targetAmount - currentAmount).toLocaleString("ko-KR")}원`}
+                  ? `+${formatKorean(currentAmount - targetAmount)} 초과`
+                  : `남은 ${formatKorean(targetAmount - currentAmount)}`}
               </span>
             </div>
           </>
         ) : (
           <p className="text-xs text-zinc-600 mt-1">
-            {targetAmount ? "잔고 데이터가 없어요" : "목표 금액을 설정하면 달성률을 볼 수 있어요"}
+            {targetAmount ? "자산 데이터가 없어요" : "목표 금액을 설정하면 달성률을 볼 수 있어요"}
           </p>
         )}
       </div>
 
+      {/* 목표 수익률 */}
       <div className="border-t border-zinc-800 pt-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs text-zinc-500">목표 수익률 (연간)</span>
@@ -167,7 +184,7 @@ export default function GoalCard({ initialTargetAmount, initialTargetReturn, cur
           </div>
         ) : (
           <p className="text-xs text-zinc-600 mt-1">
-            {targetReturn != null ? "연간 수익률 데이터가 없어요" : "목표 수익률을 설정하면 비교해 드려요"}
+            {targetReturn != null ? "수익률 데이터가 없어요" : "목표 수익률을 설정하면 비교해 드려요"}
           </p>
         )}
       </div>

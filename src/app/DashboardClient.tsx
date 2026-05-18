@@ -5,7 +5,6 @@ import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
 import AddRecordForm from "@/components/AddRecordForm";
 import MemoCard from "@/components/MemoCard";
-import GoalCard from "@/components/GoalCard";
 
 interface Record {
   id: number;
@@ -25,8 +24,6 @@ interface Stats {
 interface Memos {
   goal: string;
   thought: string;
-  target_amount: string;
-  target_return: string;
 }
 
 export default function DashboardClient({ records, stats, memos }: { records: Record[]; stats: Stats; memos: Memos }) {
@@ -50,15 +47,6 @@ export default function DashboardClient({ records, stats, memos }: { records: Re
           <div className="col-span-2">
             <StatCard label="연간 수익률" value={stats.yearly} />
           </div>
-        </div>
-
-        <div className="mb-5">
-          <GoalCard
-            initialTargetAmount={memos.target_amount ? parseInt(memos.target_amount) : null}
-            initialTargetReturn={memos.target_return ? parseFloat(memos.target_return) : null}
-            currentAmount={stats.latestAmount}
-            currentYearlyReturn={stats.yearly}
-          />
         </div>
 
         <div className="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 mb-5">
