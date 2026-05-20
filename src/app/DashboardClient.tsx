@@ -5,6 +5,7 @@ import StatCard from "@/components/StatCard";
 import PortfolioChart from "@/components/PortfolioChart";
 import AddRecordForm from "@/components/AddRecordForm";
 import MemoCard from "@/components/MemoCard";
+import { downloadExcel } from "@/lib/excel";
 
 interface Record {
   id: number;
@@ -101,7 +102,27 @@ export default function DashboardClient({ records, stats, memos }: { records: Re
 
         {records.length > 0 && (
           <div className="mt-5 bg-zinc-900 rounded-2xl p-4 border border-zinc-800">
-            <h2 className="font-semibold text-zinc-100 mb-3">기록 목록</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-zinc-100">기록 목록</h2>
+              <button
+                onClick={() => {
+                  const rows = [...records].reverse().map((r, i, arr) => {
+                    const prev = arr[i + 1];
+                    return {
+                      날짜: r.date,
+                      "잔고(원)": r.amount,
+                      "전일대비(원)": prev ? r.amount - prev.amount : "",
+                      "일간수익률(%)": r.dailyReturn ?? "",
+                    };
+                  });
+                  downloadExcel(rows, "주식잔고", "주식잔고");
+                }}
+                className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors"
+                title="엑셀로 내보내기"
+              >
+                ↓ 엑셀
+              </button>
+            </div>
             <div className="space-y-1">
               {[...records].reverse().map((r, i, arr) => {
                 const prev = arr[i + 1];
