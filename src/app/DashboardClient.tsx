@@ -34,7 +34,28 @@ export default function DashboardClient({ records, stats, memos }: { records: Re
   return (
     <div className="min-h-screen bg-zinc-950">
       <div className="max-w-lg mx-auto px-4 py-6 pb-10">
-        <h1 className="text-xl font-bold text-zinc-100 mb-1">내 주식 잔고</h1>
+        <div className="flex items-start justify-between mb-1">
+          <h1 className="text-xl font-bold text-zinc-100">내 주식 잔고</h1>
+          {records.length > 0 && (
+            <button
+              onClick={() => {
+                const rows = [...records].reverse().map((r, i, arr) => {
+                  const prev = arr[i + 1];
+                  return {
+                    날짜: r.date,
+                    "잔고(원)": r.amount,
+                    "전일대비(원)": prev ? r.amount - prev.amount : "",
+                    "일간수익률(%)": r.dailyReturn ?? "",
+                  };
+                });
+                downloadExcel(rows, "주식잔고", "주식잔고");
+              }}
+              className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors px-2 py-1 rounded border border-zinc-800 hover:border-emerald-800"
+            >
+              ↓ 엑셀
+            </button>
+          )}
+        </div>
         {stats.latestDate && (
           <p className="text-sm text-zinc-500 mb-5">최근 기록: {stats.latestDate}</p>
         )}
@@ -102,27 +123,7 @@ export default function DashboardClient({ records, stats, memos }: { records: Re
 
         {records.length > 0 && (
           <div className="mt-5 bg-zinc-900 rounded-2xl p-4 border border-zinc-800">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-zinc-100">기록 목록</h2>
-              <button
-                onClick={() => {
-                  const rows = [...records].reverse().map((r, i, arr) => {
-                    const prev = arr[i + 1];
-                    return {
-                      날짜: r.date,
-                      "잔고(원)": r.amount,
-                      "전일대비(원)": prev ? r.amount - prev.amount : "",
-                      "일간수익률(%)": r.dailyReturn ?? "",
-                    };
-                  });
-                  downloadExcel(rows, "주식잔고", "주식잔고");
-                }}
-                className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors"
-                title="엑셀로 내보내기"
-              >
-                ↓ 엑셀
-              </button>
-            </div>
+            <h2 className="font-semibold text-zinc-100 mb-3">기록 목록</h2>
             <div className="space-y-1">
               {[...records].reverse().map((r, i, arr) => {
                 const prev = arr[i + 1];

@@ -263,6 +263,25 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
                   {undoStack.length > 1 && <span className="text-zinc-600">({undoStack.length})</span>}
                 </button>
               )}
+              {expenseHistory.length > 0 && (
+                <button
+                  onClick={async () => {
+                    const res = await fetch("/api/expenses/export");
+                    const data: { label: string; categories: Record<string, number>; total: number }[] = await res.json();
+                    const allCats = Array.from(new Set(data.flatMap((d) => Object.keys(d.categories))));
+                    const rows = data.map((e) => {
+                      const row: Record<string, unknown> = { 월: e.label };
+                      for (const cat of allCats) row[cat + "(원)"] = e.categories[cat] ?? 0;
+                      row["총지출(원)"] = e.total;
+                      return row;
+                    });
+                    downloadExcel(rows, "가계부", "월별지출");
+                  }}
+                  className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors px-2 py-1 rounded border border-zinc-800 hover:border-emerald-800"
+                >
+                  ↓ 엑셀
+                </button>
+              )}
               <span className="text-xl font-bold text-zinc-100">{formatAmount(total)}</span>
             </div>
           </div>
@@ -308,25 +327,6 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-zinc-100">월별 지출 추이</h2>
-              <div className="flex items-center gap-2">
-              <button
-                onClick={async () => {
-                  const res = await fetch("/api/expenses/export");
-                  const data: { label: string; categories: Record<string, number>; total: number }[] = await res.json();
-                  const allCats = Array.from(new Set(data.flatMap((d) => Object.keys(d.categories))));
-                  const rows = data.map((e) => {
-                    const row: Record<string, unknown> = { 월: e.label };
-                    for (const cat of allCats) row[cat + "(원)"] = e.categories[cat] ?? 0;
-                    row["총지출(원)"] = e.total;
-                    return row;
-                  });
-                  downloadExcel(rows, "가계부", "월별지출");
-                }}
-                className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors"
-                title="엑셀로 내보내기"
-              >
-                ↓ 엑셀
-              </button>
               <div className="flex gap-1">
                 {([{ label: "1년", months: 12 }, { label: "전체", months: 0 }] as const).map(({ label, months }) => (
                   <button
@@ -341,7 +341,6 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
                     {label}
                   </button>
                 ))}
-              </div>
               </div>
             </div>
 

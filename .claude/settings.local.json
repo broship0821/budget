@@ -5,7 +5,28 @@
       "PowerShell(Get-Service *)",
       "PowerShell(& \"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\pg_isready.exe\" -U postgres)",
       "PowerShell($env:PGPASSWORD = \"\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -c \"\\\\l\" 2>&1)",
-      "PowerShell($env:PGPASSWORD = \"postgres\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -c \"CREATE DATABASE jusic;\" 2>&1)"
+      "PowerShell($env:PGPASSWORD = \"postgres\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -c \"CREATE DATABASE jusic;\" 2>&1)",
+      "PowerShell(taskkill *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "PowerShell(npx prisma migrate dev --name add_expenses 2>&1)",
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "PowerShell(npx prisma generate 2>&1)",
+      "Bash(npx next *)",
+      "Bash(curl *)",
+      "PowerShell(npx prisma migrate dev --name add_assets 2>&1)",
+      "PowerShell(npx prisma migrate dev --name flatten_asset_items 2>&1)",
+      "PowerShell($env:PGPASSWORD = \"postgres\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -d jusic -c \"INSERT INTO asset_items \\(name, `\"order`\"\\) VALUES \\('형배ISA', 8\\), \\('송언ISA', 9\\);\" 2>&1)",
+      "PowerShell($env:PGPASSWORD = \"postgres\"; & \"C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe\" -U postgres -d jusic -c \"SELECT id, name, `\"order`\" FROM asset_items ORDER BY `\"order`\";\" 2>&1)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)",
+      "Bash(node *)",
+      "Bash(\\\\.env\")",
+      "Bash(Get-ChildItem \"D:\\\\prj\\\\jusic\" -Filter \"*.env*\" -Force)",
+      "Bash(Select-Object Name)",
+      "Bash(npm install *)"
     ]
   }
 }

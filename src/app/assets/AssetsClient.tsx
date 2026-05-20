@@ -220,15 +220,40 @@ export default function AssetsClient({ isAuthed, initialTargetAmount, initialTar
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-5">
           <div className="flex justify-between items-center">
             <span className="text-sm text-zinc-400">총 자산</span>
-            {isAuthed && (
-              <button
-                onClick={copyFromPrevMonth}
-                className="text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
-                title="전월 데이터를 현재 달로 복사"
-              >
-                전월 복사
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {isAuthed && (
+                <button
+                  onClick={copyFromPrevMonth}
+                  className="text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
+                  title="전월 데이터를 현재 달로 복사"
+                >
+                  전월 복사
+                </button>
+              )}
+              {history.length > 0 && (
+                <button
+                  onClick={() => {
+                    const rows = history.map((e, idx) => {
+                      const prev = idx > 0 ? history[idx - 1] : null;
+                      const row: Record<string, unknown> = { 월: e.label };
+                      for (const item of items) row[item.name + "(원)"] = e.byItem[item.id] ?? 0;
+                      row["총자산(원)"] = e.total;
+                      row["증감(원)"] = prev ? e.total - prev.total : "";
+                      if (prev && prev.total) {
+                        row["증감률(%)"] = (((e.total - prev.total) / prev.total) * 100).toFixed(2);
+                      } else {
+                        row["증감률(%)"] = "";
+                      }
+                      return row;
+                    });
+                    downloadExcel(rows, "자산현황", "월별자산");
+                  }}
+                  className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors px-2 py-1 rounded border border-zinc-800 hover:border-emerald-800"
+                >
+                  ↓ 엑셀
+                </button>
+              )}
+            </div>
             <span className="text-xl font-bold text-zinc-100">{formatAmount(total)}</span>
           </div>
           {recordedAt && (
@@ -378,29 +403,6 @@ export default function AssetsClient({ isAuthed, initialTargetAmount, initialTar
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-zinc-100">월별 자산 추이</h2>
-              <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  const rows = history.map((e, idx) => {
-                    const prev = idx > 0 ? history[idx - 1] : null;
-                    const row: Record<string, unknown> = { 월: e.label };
-                    for (const item of items) row[item.name + "(원)"] = e.byItem[item.id] ?? 0;
-                    row["총자산(원)"] = e.total;
-                    row["증감(원)"] = prev ? e.total - prev.total : "";
-                    if (prev && prev.total) {
-                      row["증감률(%)"] = (((e.total - prev.total) / prev.total) * 100).toFixed(2);
-                    } else {
-                      row["증감률(%)"] = "";
-                    }
-                    return row;
-                  });
-                  downloadExcel(rows, "자산현황", "월별자산");
-                }}
-                className="text-xs text-zinc-500 hover:text-emerald-400 transition-colors"
-                title="엑셀로 내보내기"
-              >
-                ↓ 엑셀
-              </button>
               <div className="flex gap-1">
                 {([{ label: "1년", months: 12 }, { label: "전체", months: 0 }] as const).map(({ label, months }) => (
                   <button
@@ -415,7 +417,6 @@ export default function AssetsClient({ isAuthed, initialTargetAmount, initialTar
                     {label}
                   </button>
                 ))}
-              </div>
               </div>
             </div>
 
