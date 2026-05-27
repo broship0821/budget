@@ -30,6 +30,9 @@
 .DS_Store
 *.pem
 
+# server launcher exe (compiled from scripts/server-manager.ps1)
+*.exe
+
 # debug
 npm-debug.log*
 yarn-debug.log*
