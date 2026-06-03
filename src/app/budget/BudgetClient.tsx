@@ -407,6 +407,7 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
               const yMin = nonZero.length > 0 ? Math.floor(Math.min(...nonZero) * 0.9) : 0;
               const yMax = nonZero.length > 0 ? Math.ceil(Math.max(...nonZero) * 1.05) : 100;
               return (
+            <>
             <ResponsiveContainer width="100%" height={200}>
               <LineChart
                 data={chartData}
@@ -452,6 +453,34 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
                 <Line type="monotone" dataKey="total" stroke="#f59e0b" strokeWidth={2} dot={{ fill: "#f59e0b", r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
+            <div className="mt-4 border-t border-zinc-800 pt-4">
+              <div className="grid grid-cols-3 text-xs text-zinc-600 mb-2 px-1">
+                <span>월</span>
+                <span className="text-right">총 지출</span>
+                <span className="text-right">전월 대비</span>
+              </div>
+              <div className="space-y-1">
+                {chartData.slice().reverse().map((entry) => {
+                  const color = entry.change === null || entry.change === 0
+                    ? "text-zinc-500"
+                    : entry.change > 0 ? "text-red-400" : "text-emerald-400";
+                  return (
+                    <div key={entry.label} className="grid grid-cols-3 px-1 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
+                      <span className="text-zinc-400 text-xs self-center">{entry.label}</span>
+                      <span className="text-zinc-200 text-right text-xs self-center">{formatAmount(entry.total)}</span>
+                      {entry.change === null ? (
+                        <span className="text-zinc-700 text-right text-xs self-center">—</span>
+                      ) : (
+                        <span className={`text-right text-xs font-medium self-center ${color}`}>
+                          {entry.change > 0 ? "+" : ""}{formatAmount(entry.change)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            </>
               );
             })()}
           </div>
