@@ -31,8 +31,8 @@ function formatAmount(n: number) {
 
 export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
   const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() === 0 ? 12 : now.getMonth());
   const [categories, setCategories] = useState<BudgetCategory[]>(() => isAuthed ? [] : DUMMY_BUDGET_CATEGORIES);
   const [expenses, setExpenses] = useState<Record<string, number>>(() => isAuthed ? {} : DUMMY_EXPENSES);
   const [editing, setEditing] = useState<string | null>(null);
