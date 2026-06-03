@@ -23,6 +23,7 @@ interface ExpenseHistory {
   total: number;
   label: string;
   change: number | null;
+  byCategory?: Record<string, number>;
 }
 
 function formatAmount(n: number) {
@@ -44,6 +45,7 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
   const [undoStack, setUndoStack] = useState<{ category: string; amount: number }[]>([]);
   const [expenseHistory, setExpenseHistory] = useState<ExpenseHistory[]>(() => isAuthed ? [] : DUMMY_EXPENSE_HISTORY);
   const [historyPeriod, setHistoryPeriod] = useState(12);
+  const [selectedChartCat, setSelectedChartCat] = useState<string | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -382,7 +384,9 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
         {expenseHistory.filter((e) => e.total > 0).length >= 2 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-zinc-100">월별 지출 추이</h2>
+              <h2 className="font-semibold text-zinc-100">
+                월별 지출 추이{selectedChartCat && <span className="text-amber-400"> · {selectedChartCat}</span>}
+              </h2>
               <div className="flex gap-1">
                 {([{ label: "1년", months: 12 }, { label: "전체", months: 0 }] as const).map(({ label, months }) => (
                   <button
@@ -400,19 +404,55 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
               </div>
             </div>
 
+            <div className="flex flex-wrap gap-2 mb-4">
+              <button
+                onClick={() => setSelectedChartCat(null)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  selectedChartCat === null
+                    ? "bg-amber-500 text-white"
+                    : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                전체
+              </button>
+              {categories.map((cat, i) => {
+                const color = PALETTE[i % PALETTE.length];
+                const active = selectedChartCat === cat.name;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedChartCat(active ? null : cat.name)}
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      active ? "bg-zinc-700 text-zinc-100" : "bg-zinc-800 text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: active ? color : "#52525b" }} />
+                    {cat.name}
+                  </button>
+                );
+              })}
+            </div>
+
             {(() => {
-              const filtered = expenseHistory.filter((e) => e.total > 0);
-              const chartData = historyPeriod === 0 ? filtered : filtered.slice(-historyPeriod);
-              const nonZero = chartData.map((e) => e.total).filter((v) => v > 0);
-              const yMin = nonZero.length > 0 ? Math.floor(Math.min(...nonZero) * 0.9) : 0;
-              const yMax = nonZero.length > 0 ? Math.ceil(Math.max(...nonZero) * 1.05) : 100;
+              const getValue = (e: ExpenseHistory) =>
+                selectedChartCat ? (e.byCategory?.[selectedChartCat] ?? 0) : e.total;
+              const base = expenseHistory.filter((e) => getValue(e) > 0);
+              const sliced = historyPeriod === 0 ? base : base.slice(-historyPeriod);
+              const chartData = sliced.map((entry, idx) => ({
+                ...entry,
+                displayTotal: getValue(entry),
+                displayChange: idx > 0 ? getValue(entry) - getValue(sliced[idx - 1]) : null,
+              }));
+              const vals = chartData.map((e) => e.displayTotal);
+              const yMin = vals.length > 0 ? Math.floor(Math.min(...vals) * 0.9) : 0;
+              const yMax = vals.length > 0 ? Math.ceil(Math.max(...vals) * 1.05) : 100;
+              const lineColor = selectedChartCat
+                ? PALETTE[categories.findIndex((c) => c.name === selectedChartCat) % PALETTE.length] ?? "#f59e0b"
+                : "#f59e0b";
               return (
             <>
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart
-                data={chartData}
-                margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-              >
+              <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
                 <XAxis
                   dataKey="label"
@@ -436,43 +476,43 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
-                    const entry = payload[0].payload as ExpenseHistory;
+                    const entry = payload[0].payload as typeof chartData[number];
                     return (
                       <div className="bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs">
                         <p className="text-zinc-400 mb-1">{entry.label}</p>
-                        <p className="text-zinc-100 font-semibold">{formatAmount(entry.total)}</p>
-                        {entry.change !== null && (
-                          <p className={entry.change >= 0 ? "text-red-400" : "text-emerald-400"}>
-                            {entry.change >= 0 ? "+" : ""}{formatAmount(entry.change)}
+                        <p className="text-zinc-100 font-semibold">{formatAmount(entry.displayTotal)}</p>
+                        {entry.displayChange !== null && (
+                          <p className={entry.displayChange >= 0 ? "text-red-400" : "text-emerald-400"}>
+                            {entry.displayChange >= 0 ? "+" : ""}{formatAmount(entry.displayChange)}
                           </p>
                         )}
                       </div>
                     );
                   }}
                 />
-                <Line type="monotone" dataKey="total" stroke="#f59e0b" strokeWidth={2} dot={{ fill: "#f59e0b", r: 3 }} activeDot={{ r: 5 }} />
+                <Line type="monotone" dataKey="displayTotal" stroke={lineColor} strokeWidth={2} dot={{ fill: lineColor, r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
             <div className="mt-4 border-t border-zinc-800 pt-4">
               <div className="grid grid-cols-3 text-xs text-zinc-600 mb-2 px-1">
                 <span>월</span>
-                <span className="text-right">총 지출</span>
+                <span className="text-right">{selectedChartCat ?? "총 지출"}</span>
                 <span className="text-right">전월 대비</span>
               </div>
               <div className="space-y-1">
                 {chartData.slice().reverse().map((entry) => {
-                  const color = entry.change === null || entry.change === 0
+                  const color = entry.displayChange === null || entry.displayChange === 0
                     ? "text-zinc-500"
-                    : entry.change > 0 ? "text-red-400" : "text-emerald-400";
+                    : entry.displayChange > 0 ? "text-red-400" : "text-emerald-400";
                   return (
                     <div key={entry.label} className="grid grid-cols-3 px-1 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors">
                       <span className="text-zinc-400 text-xs self-center">{entry.label}</span>
-                      <span className="text-zinc-200 text-right text-xs self-center">{formatAmount(entry.total)}</span>
-                      {entry.change === null ? (
+                      <span className="text-zinc-200 text-right text-xs self-center">{formatAmount(entry.displayTotal)}</span>
+                      {entry.displayChange === null ? (
                         <span className="text-zinc-700 text-right text-xs self-center">—</span>
                       ) : (
                         <span className={`text-right text-xs font-medium self-center ${color}`}>
-                          {entry.change > 0 ? "+" : ""}{formatAmount(entry.change)}
+                          {entry.displayChange > 0 ? "+" : ""}{formatAmount(entry.displayChange)}
                         </span>
                       )}
                     </div>

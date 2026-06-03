@@ -7,14 +7,25 @@ export async function GET() {
   });
 
   const monthlyMap = new Map<string, number>();
+  const byCatMap = new Map<string, Record<string, number>>();
+
   for (const r of records) {
     const key = `${r.year}-${String(r.month).padStart(2, "0")}`;
     monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + Number(r.amount));
+    if (!byCatMap.has(key)) byCatMap.set(key, {});
+    const catMap = byCatMap.get(key)!;
+    catMap[r.category] = (catMap[r.category] ?? 0) + Number(r.amount);
   }
 
   const entries = Array.from(monthlyMap.entries()).map(([key, total]) => {
     const [year, month] = key.split("-");
-    return { year: parseInt(year), month: parseInt(month), total, label: `${year}.${month}` };
+    return {
+      year: parseInt(year),
+      month: parseInt(month),
+      total,
+      label: `${year}.${month}`,
+      byCategory: byCatMap.get(key) ?? {},
+    };
   });
 
   return NextResponse.json(
