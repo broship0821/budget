@@ -400,9 +400,15 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
               </div>
             </div>
 
+            {(() => {
+              const chartData = historyPeriod === 0 ? expenseHistory : expenseHistory.slice(-historyPeriod);
+              const nonZero = chartData.map((e) => e.total).filter((v) => v > 0);
+              const yMin = nonZero.length > 0 ? Math.floor(Math.min(...nonZero) * 0.9) : 0;
+              const yMax = nonZero.length > 0 ? Math.ceil(Math.max(...nonZero) * 1.05) : 100;
+              return (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart
-                data={historyPeriod === 0 ? expenseHistory : expenseHistory.slice(-historyPeriod)}
+                data={chartData}
                 margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
@@ -411,17 +417,14 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
                   tick={{ fill: "#71717a", fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
-                  interval={Math.max(0, Math.ceil((historyPeriod === 0 ? expenseHistory.length : Math.min(expenseHistory.length, historyPeriod)) / 6) - 1)}
+                  interval={Math.max(0, Math.ceil(chartData.length / 6) - 1)}
                 />
                 <YAxis
                   tick={{ fill: "#71717a", fontSize: 11 }}
                   tickLine={false}
                   axisLine={false}
                   width={52}
-                  domain={[
-                    (min: number) => Math.floor(min * 0.998),
-                    (max: number) => Math.ceil(max * 1.002),
-                  ]}
+                  domain={[yMin, yMax]}
                   tickFormatter={(v) => {
                     if (v >= 100000000) return `${(v / 100000000).toFixed(1)}억`;
                     if (v >= 10000) return `${(v / 10000).toFixed(0)}만`;
@@ -448,6 +451,8 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
                 <Line type="monotone" dataKey="total" stroke="#f59e0b" strokeWidth={2} dot={{ fill: "#f59e0b", r: 3 }} activeDot={{ r: 5 }} />
               </LineChart>
             </ResponsiveContainer>
+              );
+            })()}
           </div>
         )}
       </div>
