@@ -30,6 +30,22 @@ function formatAmount(n: number) {
   return n.toLocaleString("ko-KR") + "원";
 }
 
+function evalExpr(expr: string): number {
+  const s = expr.replace(/\s/g, "").replace(/,/g, "");
+  if (!s) return 0;
+  if (!/^[0-9+\-*/.()]+$/.test(s)) return 0;
+  try {
+    const result = Function(`"use strict"; return (${s})`)();
+    return typeof result === "number" && isFinite(result) ? Math.round(result) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function hasOperator(expr: string) {
+  return /[+\-*/]/.test(expr.replace(/^-/, ""));
+}
+
 export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
   const now = new Date();
   const [year, setYear] = useState(now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear());
@@ -109,7 +125,7 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
 
   const commitEdit = async (name: string) => {
     if (!isAuthed) return;
-    const amount = parseInt(editValue.replace(/,/g, "")) || 0;
+    const amount = evalExpr(editValue);
     setEditing(null);
     setEditValue("");
     if (amount === (expenses[name] ?? 0)) return;
@@ -253,20 +269,24 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
                   {saving === cat.name && <span className="ml-auto text-xs text-zinc-600">저장 중...</span>}
                 </div>
                 {isAuthed && editing === cat.name ? (
-                  <input
-                    ref={inputRef}
-                    type="number"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={() => commitEdit(cat.name)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitEdit(cat.name);
-                      if (e.key === "Escape") { setEditing(null); setEditValue(""); }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full bg-transparent text-zinc-100 font-semibold text-base outline-none border-b border-indigo-500 pb-0.5"
-                    placeholder="0"
-                  />
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => commitEdit(cat.name)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitEdit(cat.name);
+                        if (e.key === "Escape") { setEditing(null); setEditValue(""); }
+                      }}
+                      className="w-full bg-transparent text-zinc-100 font-semibold text-base outline-none border-b border-indigo-500 pb-0.5"
+                      placeholder="0"
+                    />
+                    {hasOperator(editValue) && (
+                      <p className="text-xs text-amber-400 mt-1">= {evalExpr(editValue).toLocaleString("ko-KR")}원</p>
+                    )}
+                  </div>
                 ) : (
                   <p className={`font-semibold text-base ${(expenses[cat.name] ?? 0) === 0 ? "text-zinc-700" : "text-zinc-100"}`}>
                     {formatAmount(expenses[cat.name] ?? 0)}
