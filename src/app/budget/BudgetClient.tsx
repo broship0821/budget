@@ -2,9 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
   DUMMY_BUDGET_CATEGORIES,
   DUMMY_EXPENSES,
@@ -32,83 +29,6 @@ function formatAmount(n: number) {
   return n.toLocaleString("ko-KR") + "원";
 }
 
-function SortableCard({
-  cat, i, isAuthed, expenses, editing, editValue, saving,
-  setDeleteTarget, startEdit, setEditing, setEditValue, commitEdit, inputRef,
-}: {
-  cat: BudgetCategory;
-  i: number;
-  isAuthed: boolean;
-  expenses: Record<string, number>;
-  editing: string | null;
-  editValue: string;
-  saving: string | null;
-  setDeleteTarget: (cat: BudgetCategory) => void;
-  startEdit: (name: string) => void;
-  setEditing: (name: string | null) => void;
-  setEditValue: (v: string) => void;
-  commitEdit: (name: string) => void;
-  inputRef: React.RefObject<HTMLInputElement | null>;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cat.id });
-  const color = PALETTE[i % PALETTE.length];
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
-      onClick={() => startEdit(cat.name)}
-      className={`bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-left transition-colors relative group ${isAuthed ? "hover:border-zinc-600 cursor-pointer" : "cursor-default"}`}
-    >
-      {isAuthed && (
-        <button
-          {...attributes}
-          {...listeners}
-          onClick={(e) => e.stopPropagation()}
-          className="absolute top-2 left-2 text-zinc-700 hover:text-zinc-400 transition-colors opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing touch-none text-sm leading-none"
-          title="드래그로 순서 변경"
-        >
-          ⠿
-        </button>
-      )}
-      {isAuthed && (
-        <button
-          onClick={(e) => { e.stopPropagation(); setDeleteTarget(cat); }}
-          className="absolute top-2 right-2 text-zinc-700 hover:text-red-400 transition-colors text-base leading-none opacity-0 group-hover:opacity-100"
-          title="삭제"
-        >
-          ×
-        </button>
-      )}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-        <span className="text-sm text-zinc-400 truncate">{cat.name}</span>
-        {saving === cat.name && <span className="ml-auto text-xs text-zinc-600">저장 중...</span>}
-      </div>
-      {isAuthed && editing === cat.name ? (
-        <input
-          ref={inputRef}
-          type="number"
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onBlur={() => commitEdit(cat.name)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitEdit(cat.name);
-            if (e.key === "Escape") { setEditing(null); setEditValue(""); }
-          }}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full bg-transparent text-zinc-100 font-semibold text-base outline-none border-b border-indigo-500 pb-0.5"
-          placeholder="0"
-        />
-      ) : (
-        <p className={`font-semibold text-base ${(expenses[cat.name] ?? 0) === 0 ? "text-zinc-700" : "text-zinc-100"}`}>
-          {formatAmount(expenses[cat.name] ?? 0)}
-        </p>
-      )}
-    </div>
-  );
-}
-
 export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -124,24 +44,10 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
   const [undoStack, setUndoStack] = useState<{ category: string; amount: number }[]>([]);
   const [expenseHistory, setExpenseHistory] = useState<ExpenseHistory[]>(() => isAuthed ? [] : DUMMY_EXPENSE_HISTORY);
   const [historyPeriod, setHistoryPeriod] = useState(12);
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [dragOverId, setDragOverId] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const addInputRef = useRef<HTMLInputElement>(null);
-
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
-
-  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = categories.findIndex((c) => c.id === active.id);
-    const newIndex = categories.findIndex((c) => c.id === over.id);
-    const reordered = arrayMove(categories, oldIndex, newIndex);
-    setCategories(reordered);
-    await fetch("/api/budget/categories", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orders: reordered.map((c, i) => ({ id: c.id, order: i })) }),
-    });
-  }, [categories]);
 
   const loadCategories = () => {
     if (!isAuthed) return;
@@ -253,6 +159,37 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
     setDeleteTarget(null);
   };
 
+  const onDragStart = (e: React.DragEvent, id: number) => {
+    setDragId(id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const onDragOver = (e: React.DragEvent, id: number) => {
+    e.preventDefault();
+    if (id !== dragId) setDragOverId(id);
+  };
+
+  const onDrop = async (e: React.DragEvent, targetId: number) => {
+    e.preventDefault();
+    if (dragId === null || dragId === targetId) { setDragId(null); setDragOverId(null); return; }
+
+    const from = categories.findIndex((c) => c.id === dragId);
+    const to = categories.findIndex((c) => c.id === targetId);
+    const next = [...categories];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    const reordered = next.map((cat, idx) => ({ ...cat, order: idx }));
+    setCategories(reordered);
+    setDragId(null);
+    setDragOverId(null);
+
+    await fetch("/api/budget/categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orders: reordered.map(({ id, order }) => ({ id, order })) }),
+    });
+  };
+
   const total = categories.reduce((sum, c) => sum + (expenses[c.name] ?? 0), 0);
   const pieData = categories
     .map((c, i) => ({ name: c.name, value: expenses[c.name] ?? 0, color: PALETTE[i % PALETTE.length] }))
@@ -267,60 +204,106 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
           <button onClick={nextMonth} className="text-zinc-400 hover:text-zinc-100 text-lg px-2 py-1 transition-colors">▶</button>
         </div>
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={categories.map((c) => c.id)} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              {categories.map((cat, i) => (
-                <SortableCard
-                  key={cat.id}
-                  cat={cat}
-                  i={i}
-                  isAuthed={isAuthed}
-                  expenses={expenses}
-                  editing={editing}
-                  editValue={editValue}
-                  saving={saving}
-                  setDeleteTarget={setDeleteTarget}
-                  startEdit={startEdit}
-                  setEditing={setEditing}
-                  setEditValue={setEditValue}
-                  commitEdit={commitEdit}
-                  inputRef={inputRef}
-                />
-              ))}
-
-              {isAuthed && (
-                adding ? (
-                  <div className="bg-zinc-900 border border-indigo-500 rounded-2xl p-4 flex flex-col gap-2">
-                    <input
-                      ref={addInputRef}
-                      type="text"
-                      value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") addCategory();
-                        if (e.key === "Escape") { setAdding(false); setNewName(""); }
-                      }}
-                      className="bg-transparent text-zinc-100 text-sm outline-none w-full"
-                      placeholder="카테고리 이름"
-                    />
-                    <div className="flex gap-2">
-                      <button onClick={addCategory} className="text-xs text-indigo-400 hover:text-indigo-300">추가</button>
-                      <button onClick={() => { setAdding(false); setNewName(""); }} className="text-xs text-zinc-600 hover:text-zinc-400">취소</button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setAdding(true)}
-                    className="bg-zinc-900 border border-dashed border-zinc-700 rounded-2xl p-4 text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors text-sm"
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          {categories.map((cat, i) => {
+            const color = PALETTE[i % PALETTE.length];
+            const isDragging = dragId === cat.id;
+            const isOver = dragOverId === cat.id && dragId !== cat.id;
+            return (
+              <div
+                key={cat.id}
+                onDragOver={(e) => onDragOver(e, cat.id)}
+                onDrop={(e) => onDrop(e, cat.id)}
+                onClick={() => startEdit(cat.name)}
+                className={`bg-zinc-900 border rounded-2xl p-4 text-left transition-colors relative group
+                  ${isAuthed ? "hover:border-zinc-600 cursor-pointer" : "cursor-default"}
+                  ${isDragging ? "opacity-30" : "opacity-100"}
+                  ${isOver ? "border-indigo-500" : "border-zinc-800"}
+                `}
+              >
+                {isAuthed && (
+                  <div
+                    draggable
+                    onDragStart={(e) => { e.stopPropagation(); onDragStart(e, cat.id); }}
+                    onDragEnd={() => { setDragId(null); setDragOverId(null); }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-2 left-2 text-zinc-700 hover:text-zinc-500 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing select-none"
                   >
-                    + 추가
+                    <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+                      <circle cx="3" cy="2.5" r="1.5"/><circle cx="7" cy="2.5" r="1.5"/>
+                      <circle cx="3" cy="7" r="1.5"/><circle cx="7" cy="7" r="1.5"/>
+                      <circle cx="3" cy="11.5" r="1.5"/><circle cx="7" cy="11.5" r="1.5"/>
+                    </svg>
+                  </div>
+                )}
+                {isAuthed && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(cat); }}
+                    className="absolute top-2 right-2 text-zinc-700 hover:text-red-400 transition-colors text-base leading-none opacity-0 group-hover:opacity-100"
+                    title="삭제"
+                  >
+                    ×
                   </button>
-                )
-              )}
-            </div>
-          </SortableContext>
-        </DndContext>
+                )}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-sm text-zinc-400 truncate">{cat.name}</span>
+                  {saving === cat.name && <span className="ml-auto text-xs text-zinc-600">저장 중...</span>}
+                </div>
+                {isAuthed && editing === cat.name ? (
+                  <input
+                    ref={inputRef}
+                    type="number"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={() => commitEdit(cat.name)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitEdit(cat.name);
+                      if (e.key === "Escape") { setEditing(null); setEditValue(""); }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full bg-transparent text-zinc-100 font-semibold text-base outline-none border-b border-indigo-500 pb-0.5"
+                    placeholder="0"
+                  />
+                ) : (
+                  <p className={`font-semibold text-base ${(expenses[cat.name] ?? 0) === 0 ? "text-zinc-700" : "text-zinc-100"}`}>
+                    {formatAmount(expenses[cat.name] ?? 0)}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+
+          {isAuthed && (
+            adding ? (
+              <div className="bg-zinc-900 border border-indigo-500 rounded-2xl p-4 flex flex-col gap-2">
+                <input
+                  ref={addInputRef}
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addCategory();
+                    if (e.key === "Escape") { setAdding(false); setNewName(""); }
+                  }}
+                  className="bg-transparent text-zinc-100 text-sm outline-none w-full"
+                  placeholder="카테고리 이름"
+                />
+                <div className="flex gap-2">
+                  <button onClick={addCategory} className="text-xs text-indigo-400 hover:text-indigo-300">추가</button>
+                  <button onClick={() => { setAdding(false); setNewName(""); }} className="text-xs text-zinc-600 hover:text-zinc-400">취소</button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAdding(true)}
+                className="bg-zinc-900 border border-dashed border-zinc-700 rounded-2xl p-4 text-zinc-600 hover:text-zinc-400 hover:border-zinc-500 transition-colors text-sm"
+              >
+                + 추가
+              </button>
+            )
+          )}
+        </div>
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-5">
           <div className="flex justify-between items-center">
