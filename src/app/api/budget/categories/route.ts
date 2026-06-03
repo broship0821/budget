@@ -27,3 +27,14 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(category);
 }
+
+export async function PATCH(req: NextRequest) {
+  const { orders } = await req.json() as { orders: { id: number; order: number }[] };
+  if (!Array.isArray(orders)) return NextResponse.json({ error: "orders required" }, { status: 400 });
+
+  await prisma.$transaction(
+    orders.map(({ id, order }) => prisma.budgetCategory.update({ where: { id }, data: { order } }))
+  );
+
+  return NextResponse.json({ ok: true });
+}
