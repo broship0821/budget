@@ -379,7 +379,7 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
           </div>
         )}
 
-        {expenseHistory.length >= 2 && (
+        {expenseHistory.filter((e) => e.total > 0).length >= 2 && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mt-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold text-zinc-100">월별 지출 추이</h2>
@@ -401,7 +401,8 @@ export default function BudgetClient({ isAuthed }: { isAuthed: boolean }) {
             </div>
 
             {(() => {
-              const chartData = historyPeriod === 0 ? expenseHistory : expenseHistory.slice(-historyPeriod);
+              const filtered = expenseHistory.filter((e) => e.total > 0);
+              const chartData = historyPeriod === 0 ? filtered : filtered.slice(-historyPeriod);
               const nonZero = chartData.map((e) => e.total).filter((v) => v > 0);
               const yMin = nonZero.length > 0 ? Math.floor(Math.min(...nonZero) * 0.9) : 0;
               const yMax = nonZero.length > 0 ? Math.ceil(Math.max(...nonZero) * 1.05) : 100;
